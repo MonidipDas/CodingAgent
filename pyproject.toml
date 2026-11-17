@@ -6,10 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "sandbox-coding-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["openai>=2,<3", "docker>=7,<8", "scikit-learn>=1.5,<2"]
+dependencies = ["openai>=2,<3", "docker>=7,<8", "scikit-learn>=1.5,<2", "fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
 
 [project.scripts]
 coding-agent = "agent:main"
 
 [tool.setuptools]
-py-modules = ["agent"]
+py-modules = ["agent", "server"]

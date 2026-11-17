@@ -1,5 +1,15 @@
 # Sandbox coding agent
 
+## Browser server
+
+Install with `pip install .` and build the sandbox image as described below. Configure `GROQ_API_KEY`, `AGENT_ACCESS_TOKEN` (a random secret of at least 32 characters), and `AGENT_WORKSPACE` (an existing disposable repository directory writable by UID 65534) on the server. Keep credentials outside that workspace.
+
+Start the application with `uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1`. Open the browser interface at http://127.0.0.1:8000, enter the access token, and submit a coding task. Users interact through the browser. Server startup is an administrator operation.
+
+For remote hosting, run this process under a service manager on a dedicated Docker-capable VM and put an HTTPS reverse proxy in front of port 8000. Use exactly one application worker. The shared workspace accepts one task at a time and rejects overlapping submissions. Task history is bounded and held in memory, so restarting the server loses it. Changes persist in the configured workspace. This is a single-user initial server implementation, with no account management, durable job queue, or recovery of interrupted tasks. A completed status means the agent process exited successfully, not independent verification of its claims.
+
+The existing GCP script installs dependencies and the sandbox image. Starting and configuring this web service and HTTPS remain deployment steps.
+
 Python CLI agent using Groq through the OpenAI-compatible Python client, scikit-learn TF-IDF retrieval over repository chunks, and the Docker SDK. It repeatedly inspects, edits, and tests a workspace until it reports completion or reaches a bounded step limit.
 
 ## Run
@@ -16,7 +26,7 @@ Install project-specific build dependencies into a derived sandbox image before 
 
 `deploy.sh PROJECT_ID ZONE` provisions a dedicated Ubuntu Compute Engine VM with Docker and Python, uploads this source, and installs the controller. Requires authenticated gcloud and permissions to create instances and use SSH. VM charges apply. No public service ports or application API are exposed. Access it with gcloud compute ssh, export GROQ_API_KEY in your session, then run the CLI against a disposable writable workspace. The deployment intentionally creates no service account for sandbox workloads.
 
-The initial implementation has no multi-user API, persistent queue, or automatic GitHub publication of generated changes.
+The implementation has no multi-user accounts, persistent queue, or automatic GitHub publication of generated changes.
 
 The default Groq model is openai/gpt-oss-120b. Override it with AGENT_MODEL or --model. Requests go to https://api.groq.com/openai/v1. The OpenAI library is used as an HTTP client for Groq.
 
