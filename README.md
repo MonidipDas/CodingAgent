@@ -2,11 +2,11 @@
 
 ## Browser server
 
-Install with `pip install .` and build the sandbox image as described below. Configure `GROQ_API_KEY`, `AGENT_ACCESS_TOKEN` (a random secret of at least 32 characters), and `AGENT_WORKSPACE` (an existing disposable repository directory writable by UID 65534) on the server. Keep credentials outside that workspace.
+Install with `pip install .` and build the sandbox image as described below. Configure `GROQ_API_KEY` and `AGENT_WORKSPACE` (an existing disposable repository directory writable by UID 65534) on the server. These configure the AI provider and project directory. Browser users can submit tasks directly without signing in or entering an access token. Keep provider credentials outside that workspace.
 
-Start the application with `uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1`. Open the browser interface at http://127.0.0.1:8000, enter the access token, and submit a coding task. Users interact through the browser. Server startup is an administrator operation.
+Start the application with `uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1`. Open the browser interface at http://127.0.0.1:8000, submit a coding task. Users interact through the browser. Server startup is an administrator operation.
 
-For remote hosting, run this process under a service manager on a dedicated Docker-capable VM and put an HTTPS reverse proxy in front of port 8000. Use exactly one application worker. The shared workspace accepts one task at a time and rejects overlapping submissions. Task history is bounded and held in memory, so restarting the server loses it. Changes persist in the configured workspace. This is a single-user initial server implementation, with no account management, durable job queue, or recovery of interrupted tasks. A completed status means the agent process exited successfully, not independent verification of its claims.
+The browser interface is token-free and restricted to loopback connections and localhost hostnames. Public hosting needs a separate authenticated deployment configuration. Use exactly one application worker. The shared workspace accepts one task at a time and rejects overlapping submissions. Task history is bounded and held in memory, so restarting the server loses it. Changes persist in the configured workspace. This is a single-user initial server implementation, with no account management, durable job queue, or recovery of interrupted tasks. A completed status means the agent process exited successfully, not independent verification of its claims.
 
 The existing GCP script installs dependencies and the sandbox image. Starting and configuring this web service and HTTPS remain deployment steps.
 

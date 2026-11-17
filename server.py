@@ -1,6 +1,5 @@
 """Single-user web server for the Docker coding agent."""
 from collections import deque
-import hmac
 import os
 from pathlib import Path
 import subprocess
@@ -8,24 +7,26 @@ import sys
 import threading
 import uuid
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field
 
 
 app = FastAPI(title="CodingAgent", docs_url=None, redoc_url=None)
-security = HTTPBearer()
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]"])
 lock = threading.Lock()
 jobs = {}
 
 
-def authorize(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = os.getenv("AGENT_ACCESS_TOKEN", "")
-    if len(token) < 32:
-        raise HTTPException(503, "Server requires an AGENT_ACCESS_TOKEN of at least 32 characters")
-    if not hmac.compare_digest(credentials.credentials.encode(), token.encode()):
-        raise HTTPException(401, "Invalid access token")
+@app.middleware("http")
+async def local_access(request: Request, call_next):
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1"}:
+        return JSONResponse({"detail": "This app accepts local connections only"}, status_code=403)
+    origin = request.headers.get("origin")
+    if request.method == "POST" and origin and origin != str(request.base_url).rstrip("/"):
+        return JSONResponse({"detail": "Cross-origin requests are not allowed"}, status_code=403)
+    return await call_next(request)
 
 
 class Task(BaseModel):
@@ -64,7 +65,7 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/api/jobs", status_code=202, dependencies=[Depends(authorize)])
+@app.post("/api/jobs", status_code=202)
 def submit(task: Task):
     configured = os.getenv("AGENT_WORKSPACE")
     if not configured or not os.getenv("GROQ_API_KEY"):
@@ -83,7 +84,7 @@ def submit(task: Task):
     return {"id": job_id}
 
 
-@app.get("/api/jobs/{job_id}", dependencies=[Depends(authorize)])
+@app.get("/api/jobs/{job_id}")
 def status(job_id: str):
     with lock:
         job = jobs.get(job_id)
@@ -104,27 +105,26 @@ textarea{min-height:150px}button{margin-top:18px;background:#b9eebd;border:0;col
 button:disabled{opacity:.5;cursor:wait}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#17221e;padding:20px;border-radius:8px;max-height:500px;overflow:auto}
 #status{color:#b9eebd}p{line-height:1.6}
 </style><main><h1>CodingAgent</h1><p>Describe a change for the server workspace. The agent retrieves relevant code, edits files, and runs checks inside Docker.</p>
-<form id="form"><label for="token">Access token</label><input id="token" type="password" autocomplete="off" required>
+<form id="form">
 <label for="task">Coding task</label><textarea id="task" maxlength="12000" required placeholder="Add input validation and run the existing tests"></textarea>
 <button id="run">Run task</button></form><p id="status" role="status">Ready</p><pre id="logs" aria-label="Task output">Task output will appear here.</pre></main>
 <script>
 const form=document.getElementById('form'), button=document.getElementById('run');
 const state=document.getElementById('status'), logs=document.getElementById('logs');
-async function request(url, token, options={}) {
-  const response=await fetch(url,{...options,headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}});
+async function request(url, options={}) {
+  const response=await fetch(url,{...options,headers:{'Content-Type':'application/json'}});
   const body=await response.json();
   if(!response.ok) throw new Error(typeof body.detail==='string'?body.detail:'Request failed');
   return body;
 }
 form.addEventListener('submit',async event=>{
   event.preventDefault(); button.disabled=true; state.textContent='Starting'; logs.textContent='';
-  const token=document.getElementById('token').value;
   try {
-    const job=await request('/api/jobs',token,{method:'POST',body:JSON.stringify({prompt:document.getElementById('task').value})});
+    const job=await request('/api/jobs',{method:'POST',body:JSON.stringify({prompt:document.getElementById('task').value})});
     let result;
     do {
       await new Promise(resolve=>setTimeout(resolve,1500));
-      result=await request('/api/jobs/'+job.id,token);
+      result=await request('/api/jobs/'+job.id);
       state.textContent=result.status; logs.textContent=result.logs || 'Working…';
     } while(result.status==='running');
   } catch(error) {state.textContent=error.message;}
